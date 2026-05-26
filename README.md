@@ -22,7 +22,7 @@ Aplicación **Shiny** para procesar y compilar masivamente archivos XLS de **Cau
 ## 📁 Estructura del proyecto
 
 ```
-dga-caudales-compiler/
+Lector_DGA/
 ├── app.R                    # Aplicación Shiny principal
 ├── leer_dga_caudales.R      # Función de lectura y parseo de XLS DGA
 ├── install_packages.R       # Script de instalación de dependencias
@@ -56,7 +56,7 @@ install.packages(c(
 ### Ejecutar localmente
 
 ```r
-shiny::runApp("dga-caudales-compiler")
+shiny::runApp("Lector_DGA")
 ```
 
 O desde RStudio: abrir `app.R` y presionar **Run App**.
@@ -65,7 +65,7 @@ O desde RStudio: abrir `app.R` y presionar **Run App**.
 
 ```r
 library(rsconnect)
-rsconnect::deployApp("dga-caudales-compiler")
+rsconnect::deployApp("Lector_DGA")
 ```
 
 > ⚠️ Asegúrate de incluir `logo.png` y `leer_dga_caudales.R` en el directorio de despliegue.
