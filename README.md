@@ -141,5 +141,5 @@ Deberías haber recibido una copia de la GNU GPL junto con este programa. Si no,
 
 ---
 
-*Desarrollado para análisis hidrológico de cuencas en Chile.*  
+*Herramientas básicas para el análisis hidrológico en Chile.*  
 *Por Diego Herrera Pino.*
