@@ -6,10 +6,10 @@
 # =============================================================================
 
 leer_dga_caudales <- function(file, log_fn = message) {
-
+  
   meses <- c("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
              "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
-
+  
   # ---------------------------------------------------------------------------
   # Helpers de extracción de metadatos
   # Patrón: la celda con la etiqueta y la siguiente celda no-vacía = valor
@@ -29,7 +29,7 @@ leer_dga_caudales <- function(file, log_fn = message) {
     }
     return(NA_character_)
   }
-
+  
   # Convierte coordenada DMS "32° 46' 41''" → decimal negativo (hemisferio S/W)
   dms_a_decimal <- function(dms_str, negativo = TRUE) {
     if (is.na(dms_str) || dms_str == "") return(NA_real_)
@@ -42,12 +42,12 @@ leer_dga_caudales <- function(file, log_fn = message) {
     if (negativo) dec <- -dec
     return(dec)
   }
-
+  
   hojas      <- excel_sheets(file)
   resultados <- list()
-
+  
   for (hoja in hojas) {
-
+    
     # ── 1. Leer hoja completa como texto ──────────────────────────────────────
     raw <- tryCatch(
       read_excel(file,
@@ -62,17 +62,17 @@ leer_dga_caudales <- function(file, log_fn = message) {
     )
     if (is.null(raw)) next
     nc <- ncol(raw)
-
+    
     # Vector de texto combinado (primeras 5 cols) para búsquedas de filas
     texto_filas <- apply(
       raw[, 1:min(5, nc), drop = FALSE], 1,
       function(x) paste(replace_na(as.character(x), ""), collapse = " ")
     )
-
+    
     # ── 2. Extraer metadatos ──────────────────────────────────────────────────
     estacion    <- extraer_meta(raw, "Estaci[oó]n")
     if (is.na(estacion)) estacion <- str_trim(hoja)
-
+    
     codigo_bna  <- extraer_meta(raw, "C[oó]digo\\s*BNA")
     cuenca      <- extraer_meta(raw, "^Cuenca")
     subcuenca   <- extraer_meta(raw, "SubCuenca")
@@ -82,37 +82,37 @@ leer_dga_caudales <- function(file, log_fn = message) {
     utm_norte   <- extraer_meta(raw, "UTM\\s*Norte")
     utm_este    <- extraer_meta(raw, "UTM\\s*Este")
     area_str    <- extraer_meta(raw, "[Áa]rea\\s*de\\s*Drenaje")
-
+    
     altitud     <- suppressWarnings(as.numeric(altitud_str))
     latitud     <- dms_a_decimal(lat_str, negativo = TRUE)
     longitud    <- dms_a_decimal(lon_str, negativo = TRUE)
     utm_norte_n <- suppressWarnings(as.numeric(utm_norte))
     utm_este_n  <- suppressWarnings(as.numeric(utm_este))
     area_km2    <- suppressWarnings(as.numeric(area_str))
-
+    
     # ── 3. Detectar bloques anuales por "AÑO" ────────────────────────────────
     idx_anios <- which(str_detect(texto_filas, regex("A[ÑN]O", ignore_case = TRUE)))
-
+    
     if (length(idx_anios) == 0) {
       log_fn(sprintf("  [AVISO] Hoja '%s': no se encontraron bloques anuales.", hoja))
       next
     }
-
+    
     for (j in seq_along(idx_anios)) {
-
+      
       fila_anio <- idx_anios[j]
       fila_fin  <- if (j < length(idx_anios)) idx_anios[j + 1] - 1L else nrow(raw)
-
+      
       anio <- str_extract(texto_filas[fila_anio], "\\d{4}")
       if (is.na(anio)) next
       anio <- as.integer(anio)
-
+      
       sub <- raw[(fila_anio + 1L):fila_fin, , drop = FALSE]
-
+      
       # ── 4. Localizar cabecera "DIA" ─────────────────────────────────────────
       col_dia    <- NA_integer_
       header_idx <- NA_integer_
-
+      
       for (c_idx in 1:min(5, ncol(sub))) {
         h_idx <- which(str_trim(str_to_upper(replace_na(sub[[c_idx]], ""))) == "DIA")[1]
         if (!is.na(h_idx)) {
@@ -121,15 +121,15 @@ leer_dga_caudales <- function(file, log_fn = message) {
           break
         }
       }
-
+      
       if (is.na(header_idx)) {
         log_fn(sprintf("  [AVISO] Hoja '%s', año %d: no se encontró cabecera 'DIA'.", hoja, anio))
         next
       }
-
+      
       header    <- sub[header_idx, ]
       datos_raw <- sub[(header_idx + 1L):nrow(sub), , drop = FALSE]
-
+      
       # ── 5. Eliminar fila INDICADORES y filtrar días válidos ─────────────────
       datos_raw <- datos_raw %>%
         filter(
@@ -137,47 +137,47 @@ leer_dga_caudales <- function(file, log_fn = message) {
           !is.na(.[[col_dia]]),
           str_detect(str_trim(.[[col_dia]]), "^\\d+$")
         )
-
+      
       if (nrow(datos_raw) == 0) next
-
+      
       # ── 6. Identificar columnas de meses ────────────────────────────────────
       header_vals <- str_trim(str_to_upper(replace_na(unlist(header), "")))
       cols_meses  <- which(header_vals %in% meses)
-
+      
       if (length(cols_meses) == 0) next
       nombres_meses <- header_vals[cols_meses]
-
+      
       # ── 7. Extraer DIA + valores ─────────────────────────────────────────────
       cols_sel    <- c(col_dia, cols_meses)
       nombres_sel <- c("dia", nombres_meses)
-
+      
       datos_sel <- datos_raw[, cols_sel, drop = FALSE]
       names(datos_sel) <- nombres_sel
-
+      
       # ── 8. Extraer indicadores (columna siguiente a cada mes) ────────────────
       cols_ind     <- cols_meses + 1L
       mask_ind     <- cols_ind <= nc
       cols_ind_ok  <- cols_ind[mask_ind]
       meses_ind_ok <- nombres_meses[mask_ind]
-
+      
       datos_ind <- datos_raw[, c(col_dia, cols_ind_ok), drop = FALSE]
       names(datos_ind) <- c("dia", paste0(meses_ind_ok, "_ind"))
-
+      
       datos_sel <- datos_sel %>%
         mutate(dia = suppressWarnings(as.integer(dia))) %>%
         filter(!is.na(dia), dia >= 1L, dia <= 31L)
-
+      
       datos_ind <- datos_ind %>%
         mutate(dia = suppressWarnings(as.integer(dia))) %>%
         filter(!is.na(dia), dia >= 1L, dia <= 31L)
-
+      
       if (nrow(datos_sel) == 0) next
-
+      
       # ── 9. Pivotear e integrar ───────────────────────────────────────────────
       long_vals <- datos_sel %>%
         pivot_longer(-dia, names_to = "mes_str", values_to = "valor_raw") %>%
         mutate(Valor = suppressWarnings(as.numeric(valor_raw)))
-
+      
       if (ncol(datos_ind) > 1) {
         long_ind <- datos_ind %>%
           pivot_longer(-dia, names_to = "mes_ind", values_to = "Indicador") %>%
@@ -189,7 +189,7 @@ leer_dga_caudales <- function(file, log_fn = message) {
       } else {
         long_ind <- long_vals %>% select(dia, mes_str) %>% mutate(Indicador = NA_character_)
       }
-
+      
       long_final <- long_vals %>%
         left_join(long_ind, by = c("dia", "mes_str")) %>%
         filter(!is.na(Valor)) %>%
@@ -220,13 +220,12 @@ leer_dga_caudales <- function(file, log_fn = message) {
           Estacion, CodigoBNA, Cuenca, SubCuenca,
           Altitud_msnm, Latitud_S, Longitud_W, UTM_Norte, UTM_Este, AreaDrenaje_km2,
           Fecha, Valor, Indicador
-        )|>
-        mutate(Valor=round(as.numeric(Valor),4))
-
+        )
+      
       resultados[[length(resultados) + 1L]] <- long_final
     }
   }
-
+  
   if (length(resultados) == 0) {
     warning(sprintf("No se extrajo ningún dato del archivo: %s", basename(file)))
     return(tibble(
@@ -237,6 +236,6 @@ leer_dga_caudales <- function(file, log_fn = message) {
       Fecha = as.Date(character()), Valor = numeric(), Indicador = character()
     ))
   }
-
+  
   bind_rows(resultados) %>% arrange(Estacion, Fecha)
 }
